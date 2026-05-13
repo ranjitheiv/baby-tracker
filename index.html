@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Baby Tracker 📈</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #1a2f4e;
+    --steel: #3a6fa0;
+    --sky: #7ab3d4;
+    --pale: #e8f2f9;
+    --white: #ffffff;
+    --text: #1a2f4e;
+    --muted: #6b8aaa;
+    --border: rgba(58,111,160,0.2);
+    --wake-bg: #fff8eb; --wake-fg: #b07800; --wake-dot: #f0a500;
+    --feed-bg: #e8f2f9; --feed-fg: #1a5a8a; --feed-dot: #3a7fc1;
+    --nappy-bg: #e8f5ee; --nappy-fg: #1a6b40; --nappy-dot: #2ea05f;
+    --sleep-bg: #f0ecfa; --sleep-fg: #5230a0; --sleep-dot: #7c5cc8;
+    --tummy-bg: #fdf0e8; --tummy-fg: #a04020; --tummy-dot: #d86030;
+    --med-bg: #f0f4f8; --med-fg: #4a6080; --med-dot: #7a96b0;
+    --success-bg: #e8f5ee; --success-fg: #1a6b40;
+    --radius: 12px; --radius-sm: 8px;
+  }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: linear-gradient(135deg, #c8dff0 0%, #ddeeff 50%, #e8f4fb 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px 16px 40px;
+  }
+  #app {
+    width: 100%;
+    max-width: 400px;
+    background: var(--white);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(26,47,78,0.15);
+    display: flex;
+    flex-direction: column;
+    min-height: 600px;
+  }
+  /* Header */
+  .hdr {
+    background: var(--navy);
+    padding: 20px 20px 16px;
+    color: white;
+  }
+  .hdr-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+  #hdrMsg {
+    font-size: 13px;
+    margin-top: 4px;
+    min-height: 20px;
+    color: rgba(255,255,255,0.75);
+    transition: opacity 0.4s;
+  }
+  /* Scroll content */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    background: #f4f8fc;
+  }
+  /* Bottom nav */
+  .nav {
+    display: flex;
+    border-top: 1px solid var(--border);
+    background: var(--white);
+  }
+  .nav-btn {
+    flex: 1;
+    padding: 10px 8px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: var(--muted);
+    transition: color 0.15s;
+  }
+  .nav-btn.active { color: var(--navy); }
+  .nav-btn i { font-size: 22px; }
+  /* Event grid */
+  .evt-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .evt-btn {
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    cursor: pointer;
+    text-align: left;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.15s;
+  }
+  .evt-btn:active { transform: scale(0.97); }
+  .evt-icon {
+    width: 36px; height: 36px;
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 10px;
+    font-size: 18px;
+  }
+  .evt-lbl { font-size: 13px; font-weight: 500; color: var(--text); }
+  .evt-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  /* Panel card */
+  .panel {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .panel-hdr {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 15px; font-weight: 500; color: var(--text);
+    margin-bottom: 14px;
+  }
+  .panel-hdr i { font-size: 18px; }
+  .close-btn {
+    margin-left: auto; background: none; border: none;
+    cursor: pointer; color: var(--muted); font-size: 20px;
+    line-height: 1; display: flex; padding: 2px;
+  }
+  /* Input row */
+  .inp-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .inp-lbl {
+    font-size: 12px; color: var(--muted);
+    width: 120px; flex-shrink: 0;
+  }
+  input[type="number"], input[type="text"], select {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    background: var(--white);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type="number"]:focus, input[type="text"]:focus, select:focus {
+    border-color: var(--steel);
+  }
+  input[type="number"] { width: 80px; text-align: center; }
+  input[type="text"] { width: 100%; }
+  /* Time row */
+  .time-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px;
+    background: #f4f8fc;
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+  }
+  .time-row input[type="number"] { width: 52px; }
+  .time-colon { font-size: 18px; font-weight: 500; color: var(--muted); }
+  .time-row select { padding: 6px 8px; }
+  /* Buttons */
+  .btn-primary {
+    width: 100%; padding: 12px;
+    background: var(--navy);
+    color: white; border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 500;
+    transition: opacity 0.15s;
+    margin-top: 4px;
+  }
+  .btn-primary:active { opacity: 0.85; }
+  .btn-secondary {
+    width: 100%; padding: 10px;
+    background: none;
+    color: var(--text); border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    margin-top: 8px;
+    transition: background 0.15s;
+  }
+  .btn-secondary:hover { background: #f4f8fc; }
+  /* Nappy buttons */
+  .nappy-grid { display: flex; gap: 8px; }
+  .nappy-type-btn {
+    flex: 1; padding: 10px 6px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px; color: var(--text);
+    transition: all 0.15s;
+  }
+  .nappy-type-btn:hover { background: var(--nappy-bg); border-color: var(--nappy-dot); }
+  /* Colour swatches */
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .swatch {
+    width: 34px; height: 34px; border-radius: 50%;
+    cursor: pointer; border: 2px solid transparent;
+    transition: transform 0.1s, outline 0.1s;
+    flex-shrink: 0;
+  }
+  .swatch:hover { transform: scale(1.1); }
+  .swatch.selected { outline: 3px solid var(--navy); outline-offset: 2px; }
+  /* Section label */
+  .sec-lbl {
+    font-size: 10px; font-weight: 500; color: var(--muted);
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  /* Recent list */
+  .recent-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid var(--border);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .recent-lbl { flex: 1; font-size: 13px; color: var(--text); }
+  .recent-time { font-size: 11px; color: var(--muted); }
+  /* Toast */
+  .toast {
+    background: var(--success-bg); color: var(--success-fg);
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    font-size: 13px; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  /* Dashboard */
+  .wake-card {
+    border-radius: var(--radius); padding: 16px 18px;
+    margin-bottom: 12px;
+  }
+  .wake-time { font-size: 30px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .wake-bar-bg {
+    height: 5px; border-radius: 3px; margin-top: 12px;
+    overflow: hidden; background: rgba(0,0,0,0.12);
+  }
+  .wake-bar-fill { height: 100%; border-radius: 3px; }
+  /* Stat cards */
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 10px; margin-bottom: 12px;
+  }
+  .stat-card {
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 14px;
+  }
+  .stat-lbl { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .stat-val { font-size: 24px; font-weight: 500; color: var(--text); }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  /* Timeline strip */
+  .tl-track {
+    position: relative; height: 36px;
+    background: var(--pale); border-radius: 100px;
+  }
+  .tl-dot {
+    position: absolute; width: 22px; height: 22px; border-radius: 50%;
+    top: 50%; transform: translate(-50%, -50%);
+    border: 2px solid var(--white);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 500; color: white;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .tl-labels {
+    position: relative; height: 16px; margin-top: 4px; width: 100%;
+  }
+  .tl-lbl {
+    position: absolute; font-size: 9px; color: var(--muted);
+  }
+  /* Tab toggle */
+  .tab-toggle {
+    display: flex; background: var(--pale);
+    border-radius: var(--radius-sm); padding: 3px;
+    margin-bottom: 14px;
+  }
+  .tab-opt {
+    flex: 1; padding: 8px; border: none; background: none;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; border-radius: 7px; color: var(--muted);
+    transition: all 0.15s;
+  }
+  .tab-opt.active {
+    background: var(--white); color: var(--text);
+    font-weight: 500;
+    box-shadow: 0 1px 4px rgba(26,47,78,0.1);
+  }
+  /* Bar chart */
+  .chart-hdr {
+    display: flex; justify-content: space-between;
+    align-items: baseline; margin-bottom: 8px;
+  }
+  .chart-bars {
+    display: flex; align-items: flex-end; gap: 5px;
+    height: 70px; margin-bottom: 14px;
+  }
+  .bar-col {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; gap: 3px;
+  }
+  .bar-val { font-size: 10px; color: var(--muted); }
+  .bar-fill { width: 100%; border-radius: 4px 4px 0 0; }
+  .bar-day { font-size: 9px; color: var(--muted); }
+  /* manual time link */
+  .time-meta {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 6px;
+  }
+  .link-btn {
+    background: none; border: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 11px;
+    color: var(--steel); text-decoration: underline; padding: 0;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="hdr">
+    <div class="hdr-title">Baby Tracker 📈</div>
+    <div id="hdrMsg">&nbsp;</div>
+  </div>
+  <div class="content" id="content"></div>
+  <div class="nav">
+    <button class="nav-btn active" id="navLog" onclick="sw('log')">
+      <i class="ti ti-clipboard-list"></i>Log
+    </button>
+    <button class="nav-btn" id="navDash" onclick="sw('dash')">
+      <i class="ti ti-chart-bar"></i>Dashboard
+    </button>
+  </div>
+</div>
+
+<script>
+const MSGS = [
+  {t:"Rise and shine, super parent! ☀️",h:[5,6,7,8,9]},
+  {t:"Good morning! Another beautiful day.",h:[5,6,7,8,9,10]},
+  {t:"Morning feeds hit different at this hour.",h:[5,6,7,8,9]},
+  {t:"New day, new nappies, new memories.",h:[6,7,8,9,10,11]},
+  {t:"Another gorgeous morning with your baby.",h:[7,8,9,10,11]},
+  {t:"Good afternoon! Halfway through the day.",h:[12,13,14,15]},
+  {t:"Afternoon warrior — keep going!",h:[12,13,14,15,16,17]},
+  {t:"Post-lunch nap incoming? Fingers crossed.",h:[13,14,15,16]},
+  {t:"Nearly dinner time. You made it this far!",h:[16,17]},
+  {t:"Good evening! Almost bedtime... maybe.",h:[18,19,20,21]},
+  {t:"Evening wind-down. You've done amazingly today.",h:[18,19,20]},
+  {t:"You survived another day. Legend.",h:[18,19,20,21]},
+  {t:"The night shift begins. You've got this.",h:[21,22,23]},
+  {t:"Night feed warrior, reporting for duty.",h:[22,23,0,1]},
+  {t:"Burning the midnight oil. Absolute legend.",h:[22,23,0,1]},
+  {t:"You're amazing for being up right now.",h:[0,1,2,3,4]},
+  {t:"This too shall pass. Promise.",h:[0,1,2,3,4]},
+  {t:"Every 3am feed is love in action.",h:[2,3,4]},
+  {t:"Night shift heroes don't wear capes.",h:[22,23,0,1,2,3]},
+  {t:"Almost morning. Hang in there.",h:[3,4,5]},
+  {t:"You're doing a great job.",h:null},
+  {t:"Every feed is a win.",h:null},
+  {t:"Parenthood: hardest job, best title.",h:null},
+  {t:"You've totally got this.",h:null},
+  {t:"One nappy at a time.",h:null},
+  {t:"They're lucky to have you.",h:null},
+  {t:"You're stronger than you know.",h:null},
+  {t:"Sleep when they sleep... we know.",h:null},
+  {t:"Parent of the year, right here.",h:null},
+  {t:"Keep going. You're incredible.",h:null},
+  {t:"Baby is loved. You're doing great.",h:null},
+  {t:"Tired now, grateful forever.",h:null},
+  {t:"Your baby thinks you hung the moon.",h:null},
+  {t:"Nailing it, one feed at a time.",h:null},
+  {t:"The best parents show up. You do.",h:null},
+  {t:"It gets easier — but it's already beautiful.",h:null},
+  {t:"You're enough, exactly as you are.",h:null},
+  {t:"Grateful for every hard moment.",h:null},
+  {t:"Today's hard work is tomorrow's memory.",h:null},
+  {t:"This is love. You're doing it.",h:null},
+];
+
+const NC = [
+  {hex:'#F5EF8A',name:'Light yellow'},
+  {hex:'#D4A520',name:'Mustard'},
+  {hex:'#E07830',name:'Orange'},
+  {hex:'#A06030',name:'Brown'},
+  {hex:'#5C3A18',name:'Dark brown'},
+  {hex:'#1C0E06',name:'Black'},
+];
+
+const COL = {
+  wake:  {bg:'var(--wake-bg)',  fg:'var(--wake-fg)',  dot:'var(--wake-dot)'},
+  feed:  {bg:'var(--feed-bg)',  fg:'var(--feed-fg)',  dot:'var(--feed-dot)'},
+  nappy: {bg:'var(--nappy-bg)', fg:'var(--nappy-fg)', dot:'var(--nappy-dot)'},
+  sleep: {bg:'var(--sleep-bg)', fg:'var(--sleep-fg)', dot:'var(--sleep-dot)'},
+  tummy: {bg:'var(--tummy-bg)', fg:'var(--tummy-fg)', dot:'var(--tummy-dot)'},
+  med:   {bg:'var(--med-bg)',   fg:'var(--med-fg)',   dot:'var(--med-dot)'},
+};
+
+const ICO = {
+  wake:'ti-sun', feed:'ti-droplet', nappy:'ti-refresh',
+  sleep:'ti-moon', tummy:'ti-activity', med:'ti-heart'
+};
+
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzCmKR374v1rMDx5Y577MA-F-eKk1R9_k8wItdbzxsq3BZfqvCES4gUgN2JKmCn_N7k/exec';
+
+// Fixed mock weekly data (Mon-Sat) - replaced by real data once enough exists
+const WEEK = [
+  {d:'Mon',f:8,n:7},{d:'Tue',f:9,n:8},{d:'Wed',f:7,n:6},
+  {d:'Thu',f:10,n:9},{d:'Fri',f:8,n:7},{d:'Sat',f:9,n:8}
+];
+
+let S = {
+  tab: 'log', panel: null, dashTab: 'today',
+  toast: '', toastTmr: null,
+  wakeManual: false, sleepManual: false,
+  nappyType: null, nappyColor: null,
+  msgIdx: 0, showDate: false,
+  loading: true,
+  logs: []
+};
+
+// ─── Helpers ───────────────────────────────────────────────
+function ago(t) {
+  const m = Math.floor((Date.now()-t)/60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m+'min ago';
+  const h = Math.floor(m/60), r = m%60;
+  return r ? h+'hr '+r+'min ago' : h+'hr ago';
+}
+
+function fmt(t) {
+  return new Date(t).toLocaleTimeString('en-AU', {hour:'2-digit', minute:'2-digit', hour12:true});
+}
+
+function last(type) { return S.logs.find(l => l.type === type); }
+
+function todayCt(type) {
+  const mid = new Date(); mid.setHours(0,0,0,0);
+  return S.logs.filter(l => l.type === type && l.t >= mid.getTime()).length;
+}
+
+function wakeMin() {
+  const w = last('wake');
+  return w ? Math.floor((Date.now()-w.t)/60000) : 0;
+}
+
+function getMsg() {
+  const h = new Date().getHours();
+  const pool = MSGS.filter(m => !m.h || m.h.includes(h));
+  return pool[S.msgIdx % pool.length].t;
+}
+
+function parseT(hId, mId, apId) {
+  const hv = parseInt(document.getElementById(hId)?.value) || 12;
+  const mv = parseInt(document.getElementById(mId)?.value) || 0;
+  const ap = document.getElementById(apId)?.value || 'AM';
+  const d = new Date();
+  d.setHours(hv % 12 + (ap === 'PM' ? 12 : 0), mv, 0, 0);
+  if (d.getTime() > Date.now()) d.setDate(d.getDate()-1);
+  return d.getTime();
+}
+
+function timeInputs(hId, mId, apId) {
+  const n = new Date();
+  const h = n.getHours() % 12 || 12;
+  const m = String(n.getMinutes()).padStart(2,'0');
+  const ap = n.getHours() < 12 ? 'AM' : 'PM';
+  return `<input type="number" id="${hId}" min="1" max="12" value="${h}">
+    <span class="time-colon">:</span>
+    <input type="number" id="${mId}" min="0" max="59" value="${m}">
+    <select id="${apId}">
+      <option ${ap==='AM'?'selected':''}>AM</option>
+      <option ${ap==='PM'?'selected':''}>PM</option>
+    </select>`;
+}
+
+// ─── Sheet: parse a date string from Apps Script ───────────
+function parseSheetDate(s) {
+  // Format coming back: "14/05/2026 09:30:00"
+  if (!s) return Date.now();
+  const [datePart, timePart] = String(s).split(' ');
+  if (!datePart) return Date.now();
+  const [d, m, y] = datePart.split('/');
+  return new Date(`${y}-${m}-${d}T${timePart||'00:00:00'}`).getTime();
+}
+
+// ─── Sheet: rebuild a display label from sheet row fields ──
+function buildLabel(type, detail, color, notes) {
+  if (type === 'wake')  return 'Woke up';
+  if (type === 'sleep') return 'Went to sleep';
+  if (type === 'feed')  return 'Fed · ' + (detail || '');
+  if (type === 'nappy') return 'Nappy · ' + (detail || '') + (color ? ' · ' + color : '');
+  if (type === 'tummy') return 'Tummy time · ' + (detail || '');
+  if (type === 'med')   return notes || 'Medication';
+  return detail || type;
+}
+
+// ─── Sheet: load all existing logs on startup ──────────────
+async function loadLogs() {
+  try {
+    const res = await fetch(SCRIPT_URL);
+    const json = await res.json();
+    if (json.success && json.data.length) {
+      S.logs = json.data
+        .filter(r => r.type)
+        .map(r => ({
+          type:  r.type,
+          label: buildLabel(r.type, r.detail, r.color, r.notes),
+          t:     parseSheetDate(r.timestamp),
+        }))
+        .sort((a, b) => b.t - a.t); // newest first
+    }
+  } catch (err) {
+    console.warn('Could not load logs from sheet:', err);
+  }
+  S.loading = false;
+  render();
+}
+
+// ─── Sheet: POST a single event ────────────────────────────
+async function postToSheet(payload) {
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.warn('Could not save to sheet:', err);
+  }
+}
+
+// ─── Logging actions ───────────────────────────────────────
+function showToast(msg) {
+  S.toast = msg;
+  if (S.toastTmr) clearTimeout(S.toastTmr);
+  S.toastTmr = setTimeout(() => { S.toast = ''; if (!S.panel) render(); }, 2500);
+}
+
+function addLog(type, label, t, sheetPayload) {
+  const timestamp = t || Date.now();
+  // Add to local state immediately so the UI updates without waiting
+  S.logs.unshift({type, label, t: timestamp});
+  showToast('Logged!');
+  S.panel = null; S.nappyType = null; S.nappyColor = null;
+  render();
+  // Send to sheet in the background
+  postToSheet({ timestamp, type, ...sheetPayload });
+}
+
+function logWake()  { addLog('wake',  'Woke up',        undefined, {detail:''}); }
+function logWakeM() { addLog('wake',  'Woke up',        parseT('wH','wM','wAP'), {detail:''}); }
+function logSleep()  { addLog('sleep', 'Went to sleep',  undefined, {detail:''}); }
+function logSleepM() { addLog('sleep', 'Went to sleep',  parseT('sH','sM','sAP'), {detail:''}); }
+
+function logFeed() {
+  const L = parseInt(document.getElementById('fL')?.value) || 0;
+  const R = parseInt(document.getElementById('fR')?.value) || 0;
+  const B = parseInt(document.getElementById('fB')?.value) || 0;
+  if (!L && !R && !B) { showToast('Enter at least one value'); return; }
+  const parts = [];
+  if (L) parts.push('L '+L+'min');
+  if (R) parts.push('R '+R+'min');
+  if (B) parts.push(B+'ml bottle');
+  const detail = parts.join(' ');
+  const duration = L + R; // total breast time in minutes
+  const manual = document.getElementById('fTR')?.style.display === 'flex';
+  const t = manual ? parseT('fTH','fTM','fTAP') : Date.now();
+  addLog('feed', 'Fed · '+detail, t, {detail, duration, notes: B ? B+'ml bottle' : ''});
+}
+
+function logNappySelect(type) {
+  if (type === 'wet') {
+    addLog('nappy', 'Nappy · wet', undefined, {detail:'wet'});
+    return;
+  }
+  S.nappyType = type;
+  render();
+}
+
+function logNappyFinal() {
+  const color = S.nappyColor || '';
+  const label = 'Nappy · ' + S.nappyType + (color ? ' · ' + color.toLowerCase() : '');
+  addLog('nappy', label, undefined, {detail: S.nappyType, color});
+}
+
+function logTummy() {
+  const mins = parseInt(document.getElementById('tM')?.value) || 0;
+  if (!mins) { showToast('Enter a duration'); return; }
+  const manual = document.getElementById('tTR')?.style.display === 'flex';
+  const t = manual ? parseT('tTH','tTM','tTAP') : Date.now();
+  addLog('tummy', 'Tummy time · '+mins+'min', t, {detail: mins+'min', duration: mins});
+}
+
+function logMed() {
+  const v = (document.getElementById('mI')?.value || '').trim();
+  if (!v) { showToast('Enter medication name'); return; }
+  addLog('med', v, undefined, {notes: v});
+}
+
+// ─── Toggle helpers (DOM-only, no re-render) ───────────────
+function toggleWakeManual() {
+  const el = document.getElementById('wMR');
+  if (!el) return;
+  S.wakeManual = !S.wakeManual;
+  el.style.display = S.wakeManual ? 'flex' : 'none';
+}
+function toggleSleepManual() {
+  const el = document.getElementById('sMR');
+  if (!el) return;
+  S.sleepManual = !S.sleepManual;
+  el.style.display = S.sleepManual ? 'flex' : 'none';
+}
+function toggleFeedTime() {
+  const r = document.getElementById('fTR');
+  const b = document.getElementById('fTB');
+  if (!r) return;
+  const show = r.style.display !== 'flex';
+  r.style.display = show ? 'flex' : 'none';
+  if (b) b.textContent = show ? 'Use current time' : 'Enter time manually';
+}
+function toggleTummyTime() {
+  const r = document.getElementById('tTR');
+  const b = document.getElementById('tTB');
+  if (!r) return;
+  const show = r.style.display !== 'flex';
+  r.style.display = show ? 'flex' : 'none';
+  if (b) b.textContent = show ? 'Use current time' : 'Enter time manually';
+}
+function selectColor(hex, name) {
+  S.nappyColor = name;
+  document.querySelectorAll('.swatch').forEach(el => {
+    el.classList.toggle('selected', el.dataset.name === name);
+  });
+  const lbl = document.getElementById('colorLbl');
+  if (lbl) lbl.textContent = name;
+  const btn = document.getElementById('logNappyBtn');
+  if (btn) btn.textContent = 'Log · ' + S.nappyType + ' · ' + name.toLowerCase();
+}
+
+// ─── Panel HTML ────────────────────────────────────────────
+function panelHTML() {
+  const p = S.panel; if (!p) return '';
+  const c = COL[p];
+
+  const hdr = lbl => `<div class="panel-hdr">
+    <i class="ti ${ICO[p]}" style="color:${c.fg}"></i>${lbl}
+    <button class="close-btn" onclick="closePanel()"><i class="ti ti-x"></i></button>
+  </div>`;
+
+  const manualRow = (rowId, hId, mId, apId, logFn) => `
+    <div id="${rowId}" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;
+      margin-top:8px;padding:10px;background:#f4f8fc;border-radius:var(--radius-sm)">
+      ${timeInputs(hId, mId, apId)}
+      <button class="btn-primary" style="width:auto;padding:7px 16px;margin-top:0"
+        onclick="${logFn}">Log</button>
+    </div>`;
+
+  const timeToggleRow = (rowId, btnId, toggleFn, hId, mId, apId) => `
+    <div class="time-meta">
+      <span style="font-size:12px;color:var(--muted)">Time</span>
+      <span style="font-size:12px;color:var(--muted)">${fmt(Date.now())}</span>
+      <button class="link-btn" id="${btnId}" onclick="${toggleFn}()">Enter time manually</button>
+    </div>
+    <div id="${rowId}" class="time-row" style="display:none">
+      ${timeInputs(hId, mId, apId)}
+    </div>`;
+
+  if (p === 'wake') return `<div class="panel">
+    ${hdr('Wake up')}
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+      Logs now and starts the 45-min wake window.</p>
+    <button class="btn-primary" onclick="logWake()">Log wake · ${fmt(Date.now())}</button>
+    <button class="btn-secondary" onclick="toggleWakeManual()">Log manually</button>
+    ${manualRow('wMR','wH','wM','wAP','logWakeM()')}
+  </div>`;
+
+  if (p === 'sleep') return `<div class="panel">
+    ${hdr('Sleep')}
+    <button class="btn-primary" onclick="logSleep()">Log sleep · ${fmt(Date.now())}</button>
+    <button class="btn-secondary" onclick="toggleSleepManual()">Log manually</button>
+    ${manualRow('sMR','sH','sM','sAP','logSleepM()')}
+  </div>`;
+
+  if (p === 'feed') return `<div class="panel">
+    ${hdr('Feed')}
+    <div class="inp-row">
+      <span class="inp-lbl">Left breast (min)</span>
+      <input type="number" id="fL" min="0" max="60" placeholder="0">
+    </div>
+    <div class="inp-row">
+      <span class="inp-lbl">Right breast (min)</span>
+      <input type="number" id="fR" min="0" max="60" placeholder="0">
+    </div>
+    <div class="inp-row">
+      <span class="inp-lbl">Bottle (ml)</span>
+      <input type="number" id="fB" min="0" max="300" placeholder="0">
+    </div>
+    ${timeToggleRow('fTR','fTB','toggleFeedTime','fTH','fTM','fTAP')}
+    <button class="btn-primary" onclick="logFeed()">Log feed</button>
+  </div>`;
+
+  if (p === 'nappy') {
+    if (!S.nappyType) return `<div class="panel">
+      ${hdr('Nappy')}
+      <div class="nappy-grid">
+        <button class="nappy-type-btn" onclick="logNappySelect('wet')">Wet</button>
+        <button class="nappy-type-btn" onclick="logNappySelect('dirty')">Dirty</button>
+        <button class="nappy-type-btn" onclick="logNappySelect('both')">Both</button>
+      </div>
+    </div>`;
+
+    const swatches = NC.map(nc =>
+      `<div class="swatch" data-name="${nc.name}" 
+        style="background:${nc.hex};box-shadow:0 1px 3px rgba(0,0,0,0.25)"
+        onclick="selectColor('${nc.hex}','${nc.name}')" title="${nc.name}"></div>`
+    ).join('');
+
+    return `<div class="panel">
+      ${hdr('Nappy · '+S.nappyType)}
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
+        Poo colour <span style="opacity:.6">(optional)</span>
+      </div>
+      <div class="swatches">${swatches}</div>
+      <div id="colorLbl" style="font-size:11px;color:var(--muted);font-style:italic;min-height:18px;margin-bottom:12px"></div>
+      <button id="logNappyBtn" class="btn-primary" onclick="logNappyFinal()">
+        Log · ${S.nappyType}</button>
+    </div>`;
+  }
+
+  if (p === 'tummy') return `<div class="panel">
+    ${hdr('Tummy time')}
+    <div class="inp-row">
+      <span class="inp-lbl">Duration (min)</span>
+      <input type="number" id="tM" min="0" max="60" placeholder="0">
+    </div>
+    ${timeToggleRow('tTR','tTB','toggleTummyTime','tTH','tTM','tTAP')}
+    <button class="btn-primary" onclick="logTummy()">Log tummy time</button>
+  </div>`;
+
+  if (p === 'med') return `<div class="panel">
+    ${hdr('Medication')}
+    <input type="text" id="mI" placeholder="e.g. Vitamin D drops, Infacol..."
+      style="margin-bottom:12px">
+    <button class="btn-primary" onclick="logMed()">Log medication</button>
+  </div>`;
+
+  return '';
+}
+
+// ─── Log view ──────────────────────────────────────────────
+function renderLog() {
+  const evts = [
+    {id:'wake',lbl:'Wake up'},{id:'feed',lbl:'Feed'},
+    {id:'nappy',lbl:'Nappy'},{id:'sleep',lbl:'Sleep'},
+    {id:'tummy',lbl:'Tummy time'},{id:'med',lbl:'Medication'},
+  ];
+  const grid = evts.map(e => {
+    const c = COL[e.id], l = last(e.id), act = S.panel === e.id;
+    return `<button class="evt-btn" onclick="openPanel('${e.id}')"
+      style="background:${act ? c.bg : 'var(--white)'};
+      border-color:${act ? c.dot : 'var(--border)'};
+      border-width:${act ? '2px' : '1.5px'}">
+      <div class="evt-icon" style="background:${c.bg}">
+        <i class="ti ${ICO[e.id]}" style="color:${c.fg}"></i>
+      </div>
+      <div class="evt-lbl">${e.lbl}</div>
+      <div class="evt-sub">${l ? ago(l.t) : 'not logged'}</div>
+    </button>`;
+  }).join('');
+
+  const recent = S.loading
+    ? `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">
+        Loading your logs...</div>`
+    : S.logs.length === 0
+    ? `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">
+        No logs yet — tap a button above to get started.</div>`
+    : S.logs.slice(0, 6).map(l =>
+        `<div class="recent-item">
+          <div class="dot" style="background:${COL[l.type].dot}"></div>
+          <span class="recent-lbl">${l.label}</span>
+          <span class="recent-time">${ago(l.t)}</span>
+        </div>`
+      ).join('');
+
+  const toast = S.toast
+    ? `<div class="toast"><i class="ti ti-check"></i>${S.toast}</div>` : '';
+
+  return toast + panelHTML()
+    + `<div class="evt-grid">${grid}</div>`
+    + `<div class="sec-lbl">Recent</div>${recent}`;
+}
+
+// ─── Format minutes as Xh Ym when >= 60 ───────────────────
+function fmtMins(m) {
+  if (m < 60) return m + 'min';
+  const h = Math.floor(m / 60), r = m % 60;
+  return r ? h + 'h ' + r + 'm' : h + 'h';
+}
+
+// ─── Dashboard: Today ──────────────────────────────────────
+function renderToday() {
+  const m = wakeMin(), pct = Math.min(100, Math.round(m/45*100)), over = m > 45;
+  const wBg = over ? '#fff0f0' : 'var(--wake-bg)';
+  const wFg = over ? '#a02020' : 'var(--wake-fg)';
+  const wBar = over ? '#e04040' : 'var(--wake-dot)';
+  const w = last('wake'), rem = Math.max(0, 45-m);
+
+  const wakeCard = w
+    ? `<div class="wake-card" style="background:${wBg}">
+        <div style="font-size:12px;color:${wFg};margin-bottom:4px">
+          Wake window${over ? ' — overdue!' : ' — awake for'}</div>
+        <div class="wake-time" style="color:${wFg}">${fmtMins(m)}</div>
+        <div style="font-size:11px;color:${wFg};opacity:.85;margin-top:3px">
+          ${over ? 'Time to start settling' : rem+'min remaining · woke at '+fmt(w.t)}</div>
+        <div class="wake-bar-bg">
+          <div class="wake-bar-fill" style="width:${pct}%;background:${wBar}"></div>
+        </div>
+      </div>`
+    : `<div class="wake-card" style="background:#f4f8fc;color:var(--muted);font-size:13px">
+        No wake logged yet</div>`;
+
+  // Timeline strip – last 12 hours
+  const now = Date.now(), win = 12*3600000;
+  const TL_LETTER = {wake:'W', feed:'F', nappy:'N', sleep:'S', tummy:'T', med:'M'};
+  const dots = S.logs
+    .filter(l => now-l.t <= win)
+    .map(l => {
+      const x = Math.min(96, Math.max(4, Math.round(((win-(now-l.t))/win)*100)));
+      return `<div class="tl-dot" style="left:${x}%;background:${COL[l.type].dot}"
+        title="${l.label} · ${fmt(l.t)}">${TL_LETTER[l.type]||'?'}</div>`;
+    }).join('');
+  const tlLbls = ['12h ago','9h ago','6h ago','3h ago','Now'];
+  const lbls = tlLbls.map((lbl,i) => {
+    let style;
+    if (i === 0) style = 'left:0';
+    else if (i === tlLbls.length-1) style = 'right:0';
+    else style = `left:${i*25}%;transform:translateX(-50%)`;
+    return `<span class="tl-lbl" style="${style}">${lbl}</span>`;
+  }).join('');
+
+  const timeline = `<div style="margin-bottom:14px">
+    <div class="sec-lbl">Today at a glance</div>
+    <div class="tl-track">${dots}</div>
+    <div class="tl-labels">${lbls}</div>
+  </div>`;
+
+  const fc = todayCt('feed'), nc = todayCt('nappy'), sc2 = todayCt('sleep');
+  const lf = last('feed'), ln = last('nappy'), ls = last('sleep');
+  const feeds = S.logs.filter(l => l.type === 'feed');
+  let avgGap = '—';
+  if (feeds.length >= 2) {
+    const gaps = [];
+    for (let i = 0; i < Math.min(feeds.length-1, 5); i++)
+      gaps.push(feeds[i].t - feeds[i+1].t);
+    avgGap = fmtMins(Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length/60000));
+  }
+
+  const stats = `<div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-lbl">Feeds today</div>
+      <div class="stat-val">${fc}</div>
+      <div class="stat-sub">${lf ? 'Last '+ago(lf.t) : 'none yet'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Nappies today</div>
+      <div class="stat-val">${nc}</div>
+      <div class="stat-sub">${ln ? 'Last '+ago(ln.t) : 'none yet'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Sleeps today</div>
+      <div class="stat-val">${sc2}</div>
+      <div class="stat-sub">${ls ? 'Last '+ago(ls.t) : 'none yet'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Avg feed gap</div>
+      <div class="stat-val">${avgGap}</div>
+      <div class="stat-sub">recent feeds</div>
+    </div>
+  </div>`;
+
+  return wakeCard + timeline + stats;
+}
+
+// ─── Dashboard: Weekly ─────────────────────────────────────
+function renderWeekly() {
+  const td = {d:'Today', f:todayCt('feed'), n:todayCt('nappy')};
+  const all = [...WEEK, td];
+  const maxF = Math.max(...all.map(d=>d.f), 1);
+  const maxN = Math.max(...all.map(d=>d.n), 1);
+  const avgF = (all.reduce((a,d)=>a+d.f,0)/7).toFixed(1);
+  const avgN = (all.reduce((a,d)=>a+d.n,0)/7).toFixed(1);
+
+  function chart(key, mx, color, label, avg) {
+    const bars = all.map(d =>
+      `<div class="bar-col">
+        <span class="bar-val">${d[key]}</span>
+        <div class="bar-fill" style="height:${Math.max(4,Math.round((d[key]/mx)*52))}px;background:${color}"></div>
+        <span class="bar-day">${d.d.slice(0,3)}</span>
+      </div>`
+    ).join('');
+    return `<div class="chart-hdr">
+      <span class="sec-lbl" style="margin:0">${label}</span>
+      <span style="font-size:11px;color:var(--muted)">7-day avg: ${avg}/day</span>
+    </div>
+    <div class="chart-bars">${bars}</div>`;
+  }
+
+  return `<div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-lbl">Avg feeds / day</div>
+      <div class="stat-val">${avgF}</div>
+      <div class="stat-sub">last 7 days</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Avg nappies / day</div>
+      <div class="stat-val">${avgN}</div>
+      <div class="stat-sub">last 7 days</div>
+    </div>
+  </div>
+  ${chart('f', maxF, 'var(--feed-dot)', 'Feeds per day', avgF)}
+  ${chart('n', maxN, 'var(--nappy-dot)', 'Nappies per day', avgN)}`;
+}
+
+// ─── Dashboard ─────────────────────────────────────────────
+function renderDash() {
+  const toggle = `<div class="tab-toggle">
+    <button class="tab-opt ${S.dashTab==='today'?'active':''}" onclick="swDash('today')">Today</button>
+    <button class="tab-opt ${S.dashTab==='weekly'?'active':''}" onclick="swDash('weekly')">Weekly</button>
+  </div>`;
+  return toggle + (S.dashTab === 'today' ? renderToday() : renderWeekly());
+}
+
+// ─── State transitions ─────────────────────────────────────
+function openPanel(id) {
+  S.panel = S.panel === id ? null : id;
+  S.wakeManual = false; S.sleepManual = false;
+  S.nappyType = null; S.nappyColor = null;
+  render();
+}
+function closePanel() { S.panel = null; render(); }
+function sw(t)        { S.tab = t; S.panel = null; render(); }
+function swDash(t)    { S.dashTab = t; render(); }
+
+// ─── Message ticker ────────────────────────────────────────
+function tickMsg() {
+  const el = document.getElementById('hdrMsg');
+  if (!el) return;
+  if (S.showDate) {
+    const n = new Date();
+    el.textContent = n.toLocaleDateString('en-AU',
+      {weekday:'long',day:'numeric',month:'long'}) + ' · ' + fmt(n);
+    el.style.color = 'rgba(255,255,255,0.6)';
+    el.style.fontSize = '12px';
+  } else {
+    el.textContent = getMsg();
+    el.style.color = 'rgba(255,255,255,0.9)';
+    el.style.fontSize = '13px';
+  }
+}
+
+// ─── Main render ───────────────────────────────────────────
+function render() {
+  document.getElementById('content').innerHTML =
+    S.tab === 'log' ? renderLog() : renderDash();
+
+  document.getElementById('navLog').className  = 'nav-btn' + (S.tab==='log'  ? ' active' : '');
+  document.getElementById('navDash').className = 'nav-btn' + (S.tab==='dash' ? ' active' : '');
+
+  tickMsg();
+}
+
+// ─── Intervals ─────────────────────────────────────────────
+setInterval(() => {
+  S.showDate = !S.showDate;
+  if (!S.showDate) S.msgIdx++;
+  tickMsg();
+}, 3500);
+
+setInterval(() => {
+  if (S.tab === 'dash') render();
+}, 60000);
+
+// ─── Startup ───────────────────────────────────────────────
+render();    // show the shell immediately (loading state)
+loadLogs();  // fetch real data from sheet, then re-render
+</script>
+</body>
+</html>
