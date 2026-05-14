@@ -315,6 +315,21 @@
   .edit-sub {
     font-size: 12px; color: var(--muted); margin-bottom: 16px;
   }
+  @keyframes pulse {
+    0%   { transform: scale(0.95); opacity: 0.9; }
+    70%  { transform: scale(1.5);  opacity: 0;   }
+    100% { transform: scale(1.5);  opacity: 0;   }
+  }
+  /* Collapsible log sections */
+  .sect-hdr {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0 8px; cursor: pointer; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sect-hdr .sec-lbl { margin: 0; }
+  .sect-hdr i { font-size: 15px; color: var(--muted); }
+  .sect-empty { font-size: 12px; color: var(--muted); padding: 4px 0 10px; font-style: italic; }
+  /* Stat cards */
   .stat-grid {
     display: grid; grid-template-columns: repeat(2, 1fr);
     gap: 10px; margin-bottom: 12px;
@@ -491,6 +506,7 @@ let S = {
   nappyType: null, nappyColor: null,
   msgIdx: 0, showDate: false,
   loading: true, editIdx: null, swipeLocked: -1,
+  sectOpen: {recent: true, today: false, week: false},
   logs: []
 };
 
@@ -501,6 +517,26 @@ function ago(t) {
   if (m < 60) return m+'min ago';
   const h = Math.floor(m/60), r = m%60;
   return r ? h+'hr '+r+'min ago' : h+'hr ago';
+}
+
+// Format as "Tue 3:40 PM"
+function fmtDayTime(t) {
+  const d = new Date(t);
+  const day = d.toLocaleDateString('en-AU', {weekday:'short'});
+  const time = d.toLocaleTimeString('en-AU', {hour:'numeric', minute:'2-digit', hour12:true});
+  return day + ' ' + time;
+}
+
+// Is timestamp from today?
+function isToday(t) {
+  const d = new Date(t), now = new Date();
+  return d.getDate()===now.getDate() && d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+}
+
+// Is timestamp from the past 7 days but NOT today?
+function isThisWeek(t) {
+  const weekAgo = Date.now() - 7*86400000;
+  return t >= weekAgo && !isToday(t);
 }
 
 function fmt(t) {
@@ -928,44 +964,99 @@ function renderLog() {
     {id:'nappy',lbl:'Nappy'},{id:'sleep',lbl:'Sleep'},
     {id:'tummy',lbl:'Tummy time'},{id:'med',lbl:'Medication'},
   ];
+  const bs = babyStatus();
   const grid = evts.map(e => {
     const c = COL[e.id], l = last(e.id), act = S.panel === e.id;
-    return `<button class="evt-btn" onclick="openPanel('${e.id}')"
-      style="background:${act ? c.bg : 'var(--white)'};
-      border-color:${act ? c.dot : 'var(--border)'};
-      border-width:${act ? '2px' : '1.5px'}">
-      <div class="evt-icon" style="background:${c.bg}">
-        <i class="ti ${ICO[e.id]}" style="color:${c.fg}"></i>
-      </div>
-      <div class="evt-lbl">${e.lbl}</div>
-      <div class="evt-sub">${l ? ago(l.t) : 'not logged'}</div>
-    </button>`;
+
+    let badge = '';
+    if (e.id === 'wake' && bs.state === 'warning') {
+      badge = `<div style="position:absolute;top:9px;right:9px;z-index:2;
+        background:#f59e0b;color:white;font-size:9px;font-weight:700;
+        padding:3px 7px;border-radius:100px;letter-spacing:0.03em;
+        pointer-events:none">15m</div>`;
+    } else if (e.id === 'wake' && bs.state === 'overdue') {
+      badge = `<div style="position:absolute;top:9px;right:9px;z-index:2;
+        width:20px;height:20px;pointer-events:none">
+        <div style="position:absolute;inset:0;border-radius:50%;
+          border:2.5px solid #e04040;animation:pulse 1.4s ease-out infinite"></div>
+        <div style="position:absolute;inset:4px;border-radius:50%;background:#e04040"></div>
+      </div>`;
+    }
+
+    // Sub-text: if asleep, show last woke; if awake, show time awake
+    let subText = l ? ago(l.t) : 'not logged';
+    if (e.id === 'wake') {
+      if (bs.state === 'asleep') subText = 'Last woke ' + ago(last('wake')?.t || Date.now());
+      else if (bs.state !== 'unknown' && l) subText = 'Awake ' + fmtMins(bs.minsAwake);
+    }
+
+    return `<div style="position:relative">
+      <button class="evt-btn" onclick="openPanel('${e.id}')"
+        style="background:${act ? c.bg : 'var(--white)'};
+        border-color:${act ? c.dot : 'var(--border)'};
+        border-width:${act ? '2px' : '1.5px'};width:100%">
+        <div class="evt-icon" style="background:${c.bg}">
+          <i class="ti ${ICO[e.id]}" style="color:${c.fg}"></i>
+        </div>
+        <div class="evt-lbl">${e.lbl}</div>
+        <div class="evt-sub">${subText}</div>
+      </button>
+      ${badge}
+    </div>`;
   }).join('');
 
-  const recentItems = S.loading
+  // ── Build a swipeable row ──────────────────────────────────
+  function swipeRow(l, i, timeStr) {
+    return `<div class="swipe-wrap">
+      <div class="swipe-actions">
+        <button class="swipe-btn" style="background:#3a7fc1" onclick="editLog(${i})" title="Edit time">
+          <i class="ti ti-pencil" style="color:white;font-size:15px"></i>
+        </button>
+        <button class="swipe-btn" style="background:#e04040" onclick="deleteLog(${i})" title="Delete">
+          <i class="ti ti-trash" style="color:white;font-size:15px"></i>
+        </button>
+      </div>
+      <div id="ri-${i}" class="swipe-row"
+        ontouchstart="_sw.start(event,${i})"
+        ontouchmove="_sw.move(event)"
+        ontouchend="_sw.end(event)">
+        <div class="dot" style="background:${COL[l.type].dot}"></div>
+        <span class="recent-lbl">${l.label}</span>
+        <span class="recent-time">${timeStr}</span>
+      </div>
+    </div>`;
+  }
+
+  // ── Section builder ────────────────────────────────────────
+  function section(key, label, items, timeFn, emptyMsg) {
+    const open = S.sectOpen[key];
+    const chevron = open ? 'ti-chevron-up' : 'ti-chevron-down';
+    const count = items.length ? `<span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:5px">${items.length}</span>` : '';
+    const body = !open ? '' :
+      items.length === 0
+        ? `<div class="sect-empty">${emptyMsg}</div>`
+        : items.map((l, localIdx) => {
+            // Find global index in S.logs for swipe actions
+            const globalIdx = S.logs.indexOf(l);
+            return swipeRow(l, globalIdx, timeFn(l.t));
+          }).join('');
+    return `<div class="sect-hdr" onclick="toggleSect('${key}')">
+      <span class="sec-lbl" style="margin:0">${label}${count}</span>
+      <i class="ti ${chevron}"></i>
+    </div>${body}`;
+  }
+
+  const recentLogs  = S.loading ? [] : S.logs.slice(0, 6);
+  const todayLogs   = S.loading ? [] : S.logs.filter(l => isToday(l.t));
+  const weekLogs    = S.loading ? [] : S.logs.filter(l => isThisWeek(l.t));
+
+  const loadingMsg = S.loading
     ? `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading your logs...</div>`
-    : S.logs.length === 0
-    ? `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No logs yet — tap a button above to get started.</div>`
-    : S.logs.slice(0, 8).map((l, i) =>
-        `<div class="swipe-wrap">
-          <div class="swipe-actions">
-            <button class="swipe-btn" style="background:#3a7fc1" onclick="editLog(${i})" title="Edit time">
-              <i class="ti ti-pencil" style="color:white;font-size:15px"></i>
-            </button>
-            <button class="swipe-btn" style="background:#e04040" onclick="deleteLog(${i})" title="Delete">
-              <i class="ti ti-trash" style="color:white;font-size:15px"></i>
-            </button>
-          </div>
-          <div id="ri-${i}" class="swipe-row"
-            ontouchstart="_sw.start(event,${i})"
-            ontouchmove="_sw.move(event)"
-            ontouchend="_sw.end(event)">
-            <div class="dot" style="background:${COL[l.type].dot}"></div>
-            <span class="recent-lbl">${l.label}</span>
-            <span class="recent-time">${ago(l.t)}</span>
-          </div>
-        </div>`
-      ).join('');
+    : '';
+
+  const recentSect = loadingMsg || section('recent', 'Recent',    recentLogs, ago,        'Nothing yet — tap a button above.');
+  const todaySect  = !S.loading  ? section('today',  'Today',     todayLogs,  fmtDayTime, 'No events logged today yet.')      : '';
+  const weekSect   = !S.loading  ? section('week',   'This Week', weekLogs,   fmtDayTime, 'No events from the past 7 days.')  : '';
 
   // Edit modal
   const editModal = S.editIdx !== null ? (() => {
@@ -995,14 +1086,32 @@ function renderLog() {
     </div>`;
   })() : '';
 
-  const recent = `<div class="sec-lbl">Recent <span style="font-size:9px;font-weight:400;opacity:0.6">swipe right to edit or delete</span></div>${recentItems}`;
-
   const toast = S.toast
     ? `<div class="toast"><i class="ti ti-check"></i>${S.toast}</div>` : '';
 
   return editModal + toast + panelHTML()
     + `<div class="evt-grid">${grid}</div>`
-    + recent;
+    + recentSect + todaySect + weekSect;
+}
+
+const WAKE_WINDOW = 45; // minutes
+
+// Returns {state, minsAwake, minsAsleep}
+// state: 'asleep' | 'ok' | 'warning' | 'overdue' | 'unknown'
+function babyStatus() {
+  const lastWake  = last('wake');
+  const lastSleep = last('sleep');
+  if (!lastWake && !lastSleep) return {state:'unknown'};
+  // Determine which event is more recent
+  const wakeT  = lastWake  ? lastWake.t  : 0;
+  const sleepT = lastSleep ? lastSleep.t : 0;
+  if (sleepT > wakeT) {
+    return {state:'asleep', minsAsleep: Math.floor((Date.now()-sleepT)/60000)};
+  }
+  const minsAwake = Math.floor((Date.now()-wakeT)/60000);
+  if (minsAwake >= WAKE_WINDOW)              return {state:'overdue', minsAwake};
+  if (minsAwake >= WAKE_WINDOW - 15)         return {state:'warning', minsAwake};
+  return {state:'ok', minsAwake};
 }
 
 // ─── Format minutes as Xh Ym when >= 60 ───────────────────
@@ -1014,25 +1123,47 @@ function fmtMins(m) {
 
 // ─── Dashboard: Today ──────────────────────────────────────
 function renderToday() {
-  const m = wakeMin(), pct = Math.min(100, Math.round(m/45*100)), over = m > 45;
-  const wBg = over ? '#fff0f0' : 'var(--wake-bg)';
-  const wFg = over ? '#a02020' : 'var(--wake-fg)';
-  const wBar = over ? '#e04040' : 'var(--wake-dot)';
-  const w = last('wake'), rem = Math.max(0, 45-m);
+  const bs = babyStatus();
+  const lastWake  = last('wake');
+  const lastSleep = last('sleep');
 
-  const wakeCard = w
-    ? `<div class="wake-card" style="background:${wBg}">
-        <div style="font-size:12px;color:${wFg};margin-bottom:4px">
-          Wake window${over ? ' — overdue!' : ' — awake for'}</div>
-        <div class="wake-time" style="color:${wFg}">${fmtMins(m)}</div>
-        <div style="font-size:11px;color:${wFg};opacity:.85;margin-top:3px">
-          ${over ? 'Time to start settling' : rem+'min remaining · woke at '+fmt(w.t)}</div>
-        <div class="wake-bar-bg">
-          <div class="wake-bar-fill" style="width:${pct}%;background:${wBar}"></div>
-        </div>
-      </div>`
-    : `<div class="wake-card" style="background:#f4f8fc;color:var(--muted);font-size:13px">
-        No wake logged yet</div>`;
+  let wakeCard;
+  if (bs.state === 'unknown') {
+    wakeCard = `<div class="wake-card" style="background:#f4f8fc;color:var(--muted);font-size:13px">
+      No wake logged yet</div>`;
+  } else if (bs.state === 'asleep') {
+    wakeCard = `<div class="wake-card" style="background:#e8f5ee">
+      <div style="font-size:12px;color:#1a6b40;margin-bottom:4px">Baby is asleep 😴</div>
+      <div class="wake-time" style="color:#1a6b40">${fmtMins(bs.minsAsleep)}</div>
+      <div style="font-size:11px;color:#1a6b40;opacity:.85;margin-top:3px">
+        Fell asleep ${ago(lastSleep.t)}${lastWake ? ' · woke at '+fmt(lastWake.t) : ''}</div>
+      <div class="wake-bar-bg">
+        <div class="wake-bar-fill" style="width:100%;background:#2ea05f"></div>
+      </div>
+    </div>`;
+  } else {
+    const pct = Math.min(100, Math.round((bs.minsAwake / WAKE_WINDOW) * 100));
+    const rem = Math.max(0, WAKE_WINDOW - bs.minsAwake);
+    const cfg = {
+      ok:      {bg:'var(--wake-bg)', fg:'var(--wake-fg)', bar:'var(--wake-dot)',
+                 label:'Wake window — awake for',
+                 sub: fmtMins(rem) + ' remaining · woke at ' + fmt(lastWake.t)},
+      warning: {bg:'#fff3cd', fg:'#92660a', bar:'#f59e0b',
+                 label:'Start nap routine soon ⏰',
+                 sub: fmtMins(rem) + ' until overdue · woke at ' + fmt(lastWake.t)},
+      overdue: {bg:'#fff0f0', fg:'#a02020', bar:'#e04040',
+                 label:'Overdue — nap time now! 🔴',
+                 sub: fmtMins(bs.minsAwake - WAKE_WINDOW) + ' past window · woke at ' + fmt(lastWake.t)},
+    }[bs.state];
+    wakeCard = `<div class="wake-card" style="background:${cfg.bg}">
+      <div style="font-size:12px;color:${cfg.fg};margin-bottom:4px">${cfg.label}</div>
+      <div class="wake-time" style="color:${cfg.fg}">${fmtMins(bs.minsAwake)}</div>
+      <div style="font-size:11px;color:${cfg.fg};opacity:.85;margin-top:3px">${cfg.sub}</div>
+      <div class="wake-bar-bg">
+        <div class="wake-bar-fill" style="width:${pct}%;background:${cfg.bar}"></div>
+      </div>
+    </div>`;
+  }
 
   // Timeline strip – last 12 hours
   const now = Date.now(), win = 12*3600000;
@@ -1202,9 +1333,10 @@ function openPanel(id) {
   S.nappyType = null; S.nappyColor = null;
   render();
 }
-function closePanel() { S.panel = null; render(); }
-function sw(t)        { S.tab = t; S.panel = null; render(); }
-function swDash(t)    { S.dashTab = t; render(); }
+function closePanel()      { S.panel = null; render(); }
+function sw(t)             { S.tab = t; S.panel = null; render(); }
+function swDash(t)         { S.dashTab = t; render(); }
+function toggleSect(key)   { S.sectOpen[key] = !S.sectOpen[key]; closeSwipe(); render(); }
 
 // ─── Message ticker ────────────────────────────────────────
 function tickMsg() {
