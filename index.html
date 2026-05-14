@@ -512,13 +512,28 @@ function timeInputs(hId, mId, apId) {
 }
 
 // ─── Sheet: parse a date string from Apps Script ───────────
+// Sheets auto-converts date strings to Date objects, which come back
+// via JSON as ISO strings (e.g. "2026-05-14T09:30:00.000Z").
+// We also handle our own "dd/MM/yyyy HH:mm:ss" format as a fallback.
 function parseSheetDate(s) {
-  // Format coming back: "14/05/2026 09:30:00"
   if (!s) return Date.now();
-  const [datePart, timePart] = String(s).split(' ');
-  if (!datePart) return Date.now();
-  const [d, m, y] = datePart.split('/');
-  return new Date(`${y}-${m}-${d}T${timePart||'00:00:00'}`).getTime();
+  const str = String(s).trim();
+
+  // Try direct parse first — handles ISO 8601 from Sheets ("2026-05-14T09:30:00.000Z")
+  const direct = new Date(str);
+  if (!isNaN(direct.getTime())) return direct.getTime();
+
+  // Fallback: handle "dd/MM/yyyy HH:mm:ss" format
+  const [datePart, timePart] = str.split(' ');
+  if (datePart && datePart.includes('/')) {
+    const [d, m, y] = datePart.split('/');
+    const parsed = new Date(`${y}-${m}-${d}T${timePart || '00:00:00'}`);
+    if (!isNaN(parsed.getTime())) return parsed.getTime();
+  }
+
+  // Give up gracefully — return now so at least it shows "just now"
+  console.warn('Could not parse date:', s);
+  return Date.now();
 }
 
 // ─── Sheet: rebuild a display label from sheet row fields ──
