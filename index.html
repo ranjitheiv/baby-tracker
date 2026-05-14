@@ -276,7 +276,45 @@
     overflow: hidden; background: rgba(0,0,0,0.12);
   }
   .wake-bar-fill { height: 100%; border-radius: 3px; }
-  /* Stat cards */
+  /* Swipe-to-reveal recent items */
+  .swipe-wrap {
+    position: relative; overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  .swipe-actions {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 88px; display: flex; align-items: center;
+    gap: 8px; padding: 0 10px;
+  }
+  .swipe-btn {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .swipe-row {
+    background: var(--white);
+    transition: transform 0.2s ease;
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; position: relative;
+  }
+  /* Edit modal overlay */
+  .edit-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 200; display: flex; align-items: flex-end;
+  }
+  .edit-sheet {
+    background: var(--white); width: 100%; max-width: 430px;
+    margin: 0 auto; border-radius: 20px 20px 0 0;
+    padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  }
+  .edit-title {
+    font-size: 15px; font-weight: 500; color: var(--text);
+    margin-bottom: 4px;
+  }
+  .edit-sub {
+    font-size: 12px; color: var(--muted); margin-bottom: 16px;
+  }
   .stat-grid {
     display: grid; grid-template-columns: repeat(2, 1fr);
     gap: 10px; margin-bottom: 12px;
@@ -452,7 +490,7 @@ let S = {
   wakeManual: false, sleepManual: false,
   nappyType: null, nappyColor: null,
   msgIdx: 0, showDate: false,
-  loading: true,
+  loading: true, editIdx: null, swipeLocked: -1,
   logs: []
 };
 
@@ -556,9 +594,11 @@ async function loadLogs() {
       S.logs = json.data
         .filter(r => r.type)
         .map(r => ({
-          type:  r.type,
-          label: buildLabel(r.type, r.detail, r.color, r.notes),
-          t:     parseSheetDate(r.timestamp),
+          type:     r.type,
+          label:    buildLabel(r.type, r.detail, r.color, r.notes),
+          t:        parseSheetDate(r.timestamp),
+          duration: Number(r.duration) || 0,
+          detail:   r.detail || '',
         }))
         .sort((a, b) => b.t - a.t); // newest first
     }
@@ -569,13 +609,93 @@ async function loadLogs() {
   render();
 }
 
-// ─── Sheet: POST a single event ────────────────────────────
+// ─── Swipe-to-reveal handler ───────────────────────────────
+const _sw = {
+  startX: 0, startY: 0, idx: -1, dragging: false,
+  start(e, idx) {
+    // Close any currently locked item that isn't this one
+    if (S.swipeLocked >= 0 && S.swipeLocked !== idx) {
+      const prev = document.getElementById('ri-' + S.swipeLocked);
+      if (prev) prev.style.transform = 'translateX(0)';
+      S.swipeLocked = -1;
+    }
+    this.startX = e.touches[0].clientX;
+    this.startY = e.touches[0].clientY;
+    this.idx = idx; this.dragging = true;
+  },
+  move(e) {
+    if (!this.dragging) return;
+    const dx = e.touches[0].clientX - this.startX;
+    const dy = e.touches[0].clientY - this.startY;
+    if (Math.abs(dy) > Math.abs(dx) && !S.swipeLocked) return;
+    if (dx > 0) {
+      e.preventDefault();
+      const el = document.getElementById('ri-' + this.idx);
+      if (el) el.style.transform = `translateX(${Math.min(dx, 88)}px)`;
+    }
+  },
+  end(e) {
+    if (!this.dragging) return;
+    this.dragging = false;
+    const dx = e.changedTouches[0].clientX - this.startX;
+    const el = document.getElementById('ri-' + this.idx);
+    if (dx > 40) {
+      if (el) el.style.transform = 'translateX(88px)';
+      S.swipeLocked = this.idx;
+    } else {
+      if (el) el.style.transform = 'translateX(0)';
+      if (S.swipeLocked === this.idx) S.swipeLocked = -1;
+    }
+  }
+};
+
+function closeSwipe() {
+  if (S.swipeLocked >= 0) {
+    const el = document.getElementById('ri-' + S.swipeLocked);
+    if (el) el.style.transform = 'translateX(0)';
+    S.swipeLocked = -1;
+  }
+}
+
+// ─── Edit and delete ───────────────────────────────────────
+function editLog(idx) {
+  closeSwipe();
+  S.editIdx = idx;
+  render();
+}
+
+function cancelEdit() {
+  S.editIdx = null;
+  render();
+}
+
+function saveEdit() {
+  const newT = parseT('eH','eM','eAP');
+  const log = S.logs[S.editIdx];
+  const oldT = log.t;
+  log.t = newT;
+  // Resort logs so the updated entry sits in the right position
+  S.logs.sort((a, b) => b.t - a.t);
+  postToSheet({ action: 'update', oldTimestamp: oldT, newTimestamp: newT });
+  showToast('Updated!');
+  S.editIdx = null;
+  render();
+}
+
+function deleteLog(idx) {
+  const log = S.logs[idx];
+  closeSwipe();
+  postToSheet({ action: 'delete', timestamp: log.t });
+  S.logs.splice(idx, 1);
+  S.swipeLocked = -1;
+  showToast('Deleted');
+  render();
+}
+
+// ─── Sheet: POST (log, update, delete) ─────────────────────
 async function postToSheet(payload) {
   try {
-    await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
   } catch (err) {
     console.warn('Could not save to sheet:', err);
   }
@@ -590,12 +710,14 @@ function showToast(msg) {
 
 function addLog(type, label, t, sheetPayload) {
   const timestamp = t || Date.now();
-  // Add to local state immediately so the UI updates without waiting
-  S.logs.unshift({type, label, t: timestamp});
+  S.logs.unshift({
+    type, label, t: timestamp,
+    duration: sheetPayload?.duration || 0,
+    detail: sheetPayload?.detail || '',
+  });
   showToast('Logged!');
   S.panel = null; S.nappyType = null; S.nappyColor = null;
   render();
-  // Send to sheet in the background
   postToSheet({ timestamp, type, ...sheetPayload });
 }
 
@@ -820,26 +942,67 @@ function renderLog() {
     </button>`;
   }).join('');
 
-  const recent = S.loading
-    ? `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">
-        Loading your logs...</div>`
+  const recentItems = S.loading
+    ? `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading your logs...</div>`
     : S.logs.length === 0
-    ? `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">
-        No logs yet — tap a button above to get started.</div>`
-    : S.logs.slice(0, 6).map(l =>
-        `<div class="recent-item">
-          <div class="dot" style="background:${COL[l.type].dot}"></div>
-          <span class="recent-lbl">${l.label}</span>
-          <span class="recent-time">${ago(l.t)}</span>
+    ? `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No logs yet — tap a button above to get started.</div>`
+    : S.logs.slice(0, 8).map((l, i) =>
+        `<div class="swipe-wrap">
+          <div class="swipe-actions">
+            <button class="swipe-btn" style="background:#3a7fc1" onclick="editLog(${i})" title="Edit time">
+              <i class="ti ti-pencil" style="color:white;font-size:15px"></i>
+            </button>
+            <button class="swipe-btn" style="background:#e04040" onclick="deleteLog(${i})" title="Delete">
+              <i class="ti ti-trash" style="color:white;font-size:15px"></i>
+            </button>
+          </div>
+          <div id="ri-${i}" class="swipe-row"
+            ontouchstart="_sw.start(event,${i})"
+            ontouchmove="_sw.move(event)"
+            ontouchend="_sw.end(event)">
+            <div class="dot" style="background:${COL[l.type].dot}"></div>
+            <span class="recent-lbl">${l.label}</span>
+            <span class="recent-time">${ago(l.t)}</span>
+          </div>
         </div>`
       ).join('');
+
+  // Edit modal
+  const editModal = S.editIdx !== null ? (() => {
+    const l = S.logs[S.editIdx];
+    const d = new Date(l.t);
+    const h = d.getHours() % 12 || 12;
+    const m = String(d.getMinutes()).padStart(2,'0');
+    const ap = d.getHours() < 12 ? 'AM' : 'PM';
+    const iS = 'width:52px;text-align:center;font-family:\'DM Sans\',sans-serif;font-size:15px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 4px;background:var(--white);color:var(--text)';
+    const sS = 'border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-family:\'DM Sans\',sans-serif;font-size:14px;background:var(--white);color:var(--text)';
+    return `<div class="edit-overlay" onclick="if(event.target===this)cancelEdit()">
+      <div class="edit-sheet">
+        <div class="edit-title">Edit time</div>
+        <div class="edit-sub">${l.label}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:16px">
+          <input id="eH" type="number" min="1" max="12" value="${h}" style="${iS}">
+          <span style="font-size:18px;font-weight:500;color:var(--muted)">:</span>
+          <input id="eM" type="number" min="0" max="59" value="${m}" style="${iS}">
+          <select id="eAP" style="${sS}">
+            <option ${ap==='AM'?'selected':''}>AM</option>
+            <option ${ap==='PM'?'selected':''}>PM</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="saveEdit()">Save</button>
+        <button class="btn-secondary" onclick="cancelEdit()">Cancel</button>
+      </div>
+    </div>`;
+  })() : '';
+
+  const recent = `<div class="sec-lbl">Recent <span style="font-size:9px;font-weight:400;opacity:0.6">swipe right to edit or delete</span></div>${recentItems}`;
 
   const toast = S.toast
     ? `<div class="toast"><i class="ti ti-check"></i>${S.toast}</div>` : '';
 
-  return toast + panelHTML()
+  return editModal + toast + panelHTML()
     + `<div class="evt-grid">${grid}</div>`
-    + `<div class="sec-lbl">Recent</div>${recent}`;
+    + recent;
 }
 
 // ─── Format minutes as Xh Ym when >= 60 ───────────────────
@@ -935,17 +1098,42 @@ function renderToday() {
 
 // ─── Dashboard: Weekly ─────────────────────────────────────
 function renderWeekly() {
-  // Build last 7 days (including today) from real logs
   const days = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     d.setHours(0, 0, 0, 0);
-    const dayEnd = d.getTime() + 86400000;
+    const start = d.getTime(), end = start + 86400000;
     const label = i === 0 ? 'Today' : d.toLocaleDateString('en-AU', {weekday:'short'});
-    const f = S.logs.filter(l => l.type === 'feed'  && l.t >= d.getTime() && l.t < dayEnd).length;
-    const n = S.logs.filter(l => l.type === 'nappy' && l.t >= d.getTime() && l.t < dayEnd).length;
-    days.push({d: label, f, n});
+    const dayLogs = S.logs.filter(l => l.t >= start && l.t < end);
+
+    // Feeds and nappies — simple counts
+    const f = dayLogs.filter(l => l.type === 'feed').length;
+    const n = dayLogs.filter(l => l.type === 'nappy').length;
+
+    // Tummy time — sum duration field (minutes)
+    const tt = dayLogs.filter(l => l.type === 'tummy').reduce((s, l) => s + (l.duration || 0), 0);
+
+    // Sleep / wake time — pair sleep→wake events across a wider window then clip to day
+    const pairMins = (typeA, typeB) => {
+      const window = S.logs
+        .filter(l => (l.type === typeA || l.type === typeB) && l.t >= start - 86400000 && l.t < end + 86400000)
+        .sort((a, b) => a.t - b.t);
+      let total = 0, seg = null;
+      for (const ev of window) {
+        if (ev.type === typeA && !seg) { seg = ev.t; }
+        else if (ev.type === typeB && seg) {
+          const s = Math.max(seg, start), e2 = Math.min(ev.t, end);
+          if (e2 > s) total += e2 - s;
+          seg = null;
+        }
+      }
+      return Math.round(total / 60000);
+    };
+    const sl = pairMins('sleep', 'wake');
+    const wk = pairMins('wake', 'sleep');
+
+    days.push({d: label, f, n, tt, sl, wk});
   }
 
   const totalF = days.reduce((a, d) => a + d.f, 0);
@@ -954,28 +1142,29 @@ function renderWeekly() {
 
   if (!hasData) {
     return `<div style="text-align:center;padding:48px 20px;color:var(--muted);font-size:13px;line-height:1.6">
-      No data yet.<br>Log some events and they'll appear here.
-    </div>`;
+      No data yet.<br>Log some events and they'll appear here.</div>`;
   }
 
-  const avgF = (totalF / 7).toFixed(1);
-  const avgN = (totalN / 7).toFixed(1);
-  const maxF = Math.max(...days.map(d => d.f), 1);
-  const maxN = Math.max(...days.map(d => d.n), 1);
+  const avgF  = (totalF / 7).toFixed(1);
+  const avgN  = (totalN / 7).toFixed(1);
+  const avgTT = (days.reduce((a,d)=>a+d.tt,0)/7).toFixed(0);
+  const avgSl = (days.reduce((a,d)=>a+d.sl,0)/7).toFixed(0);
+  const avgWk = (days.reduce((a,d)=>a+d.wk,0)/7).toFixed(0);
 
-  function chart(key, mx, color, label, avg) {
+  function chart(key, mx, color, label, avgLabel) {
+    const max = Math.max(...days.map(d => d[key]), 1);
     const bars = days.map(d =>
       `<div class="bar-col">
         <span class="bar-val">${d[key] || ''}</span>
-        <div class="bar-fill" style="height:${Math.max(d[key] ? 4 : 0, Math.round((d[key]/mx)*52))}px;background:${d[key] ? color : 'transparent'}"></div>
+        <div class="bar-fill" style="height:${Math.max(d[key]?4:0,Math.round((d[key]/max)*52))}px;background:${d[key]?color:'transparent'}"></div>
         <span class="bar-day">${d.d.slice(0,3)}</span>
       </div>`
     ).join('');
-    return `<div class="chart-hdr">
-      <span class="sec-lbl" style="margin:0">${label}</span>
-      <span style="font-size:11px;color:var(--muted)">7-day avg: ${avg}/day</span>
+    return `<div style="margin-bottom:5px">
+      <div class="sec-lbl" style="margin:0 0 3px">${label}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${avgLabel}</div>
     </div>
-    <div class="chart-bars">${bars}</div>`;
+    <div class="chart-bars" style="margin-bottom:16px">${bars}</div>`;
   }
 
   return `<div class="stat-grid">
@@ -990,8 +1179,11 @@ function renderWeekly() {
       <div class="stat-sub">last 7 days</div>
     </div>
   </div>
-  ${chart('f', maxF, 'var(--feed-dot)', 'Feeds per day', avgF)}
-  ${chart('n', maxN, 'var(--nappy-dot)', 'Nappies per day', avgN)}`;
+  ${chart('f',  1, 'var(--feed-dot)',  'Feeds per day',        '7-day avg: '+avgF+'/day')}
+  ${chart('n',  1, 'var(--nappy-dot)', 'Nappies per day',      '7-day avg: '+avgN+'/day')}
+  ${chart('sl', 1, 'var(--sleep-dot)', 'Total sleep per day',  '7-day avg: '+fmtMins(Number(avgSl))+'/day')}
+  ${chart('wk', 1, 'var(--wake-dot)',  'Total awake per day',  '7-day avg: '+fmtMins(Number(avgWk))+'/day')}
+  ${chart('tt', 1, 'var(--tummy-dot)', 'Tummy time per day',   '7-day avg: '+avgTT+'min/day')}`;
 }
 
 // ─── Dashboard ─────────────────────────────────────────────
@@ -1035,11 +1227,14 @@ function tickMsg() {
 function render() {
   document.getElementById('content').innerHTML =
     S.tab === 'log' ? renderLog() : renderDash();
-
   document.getElementById('navLog').className  = 'nav-btn' + (S.tab==='log'  ? ' active' : '');
   document.getElementById('navDash').className = 'nav-btn' + (S.tab==='dash' ? ' active' : '');
-
   tickMsg();
+  // Re-apply any open swipe after DOM rebuild
+  if (S.swipeLocked >= 0) {
+    const el = document.getElementById('ri-' + S.swipeLocked);
+    if (el) el.style.transform = 'translateX(88px)';
+  }
 }
 
 // ─── Intervals ─────────────────────────────────────────────
