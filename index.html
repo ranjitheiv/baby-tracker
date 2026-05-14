@@ -442,11 +442,7 @@ const ICO = {
 
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzCmKR374v1rMDx5Y577MA-F-eKk1R9_k8wItdbzxsq3BZfqvCES4gUgN2JKmCn_N7k/exec';
 
-// Fixed mock weekly data (Mon-Sat) - replaced by real data once enough exists
-const WEEK = [
-  {d:'Mon',f:8,n:7},{d:'Tue',f:9,n:8},{d:'Wed',f:7,n:6},
-  {d:'Thu',f:10,n:9},{d:'Fri',f:8,n:7},{d:'Sat',f:9,n:8}
-];
+// Weekly data built from real logs only — no mock data
 
 let S = {
   tab: 'log', panel: null, dashTab: 'today',
@@ -922,18 +918,39 @@ function renderToday() {
 
 // ─── Dashboard: Weekly ─────────────────────────────────────
 function renderWeekly() {
-  const td = {d:'Today', f:todayCt('feed'), n:todayCt('nappy')};
-  const all = [...WEEK, td];
-  const maxF = Math.max(...all.map(d=>d.f), 1);
-  const maxN = Math.max(...all.map(d=>d.n), 1);
-  const avgF = (all.reduce((a,d)=>a+d.f,0)/7).toFixed(1);
-  const avgN = (all.reduce((a,d)=>a+d.n,0)/7).toFixed(1);
+  // Build last 7 days (including today) from real logs
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    const dayEnd = d.getTime() + 86400000;
+    const label = i === 0 ? 'Today' : d.toLocaleDateString('en-AU', {weekday:'short'});
+    const f = S.logs.filter(l => l.type === 'feed'  && l.t >= d.getTime() && l.t < dayEnd).length;
+    const n = S.logs.filter(l => l.type === 'nappy' && l.t >= d.getTime() && l.t < dayEnd).length;
+    days.push({d: label, f, n});
+  }
+
+  const totalF = days.reduce((a, d) => a + d.f, 0);
+  const totalN = days.reduce((a, d) => a + d.n, 0);
+  const hasData = totalF > 0 || totalN > 0;
+
+  if (!hasData) {
+    return `<div style="text-align:center;padding:48px 20px;color:var(--muted);font-size:13px;line-height:1.6">
+      No data yet.<br>Log some events and they'll appear here.
+    </div>`;
+  }
+
+  const avgF = (totalF / 7).toFixed(1);
+  const avgN = (totalN / 7).toFixed(1);
+  const maxF = Math.max(...days.map(d => d.f), 1);
+  const maxN = Math.max(...days.map(d => d.n), 1);
 
   function chart(key, mx, color, label, avg) {
-    const bars = all.map(d =>
+    const bars = days.map(d =>
       `<div class="bar-col">
-        <span class="bar-val">${d[key]}</span>
-        <div class="bar-fill" style="height:${Math.max(4,Math.round((d[key]/mx)*52))}px;background:${color}"></div>
+        <span class="bar-val">${d[key] || ''}</span>
+        <div class="bar-fill" style="height:${Math.max(d[key] ? 4 : 0, Math.round((d[key]/mx)*52))}px;background:${d[key] ? color : 'transparent'}"></div>
         <span class="bar-day">${d.d.slice(0,3)}</span>
       </div>`
     ).join('');
