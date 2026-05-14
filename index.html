@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Baby Tracker">
 <title>Baby Tracker 📈</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Playfair+Display:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=Playfair+Display:ital,wght@0,500;1,500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -32,7 +32,7 @@
   }
   body {
     font-family: 'DM Sans', sans-serif;
-    background: var(--navy);
+    background: #111d2e;
     margin: 0;
     padding: 0;
     height: 100dvh;
@@ -51,23 +51,33 @@
   }
   /* Header */
   .hdr {
-    background: var(--navy);
+    background: #111d2e;
     padding: 20px 20px 16px;
     padding-top: max(20px, env(safe-area-inset-top));
     color: white;
     flex-shrink: 0;
   }
+  .hdr-dots {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .hdr-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+  }
   .hdr-title {
-    font-family: 'Playfair Display', serif;
+    font-family: 'DM Sans', sans-serif;
     font-size: 22px;
-    font-weight: 500;
-    letter-spacing: -0.3px;
+    font-weight: 600;
+    letter-spacing: -0.4px;
+    color: white;
   }
   #hdrMsg {
     font-size: 13px;
+    font-weight: 300;
     margin-top: 4px;
     min-height: 20px;
-    color: rgba(255,255,255,0.75);
+    color: rgba(255,255,255,0.6);
     transition: opacity 0.4s;
   }
   /* Scroll content */
@@ -343,7 +353,13 @@
 <body>
 <div id="app">
   <div class="hdr">
-    <div class="hdr-title">Baby Tracker 📈</div>
+    <div class="hdr-dots">
+      <div class="hdr-dot" style="background:#f0a500"></div>
+      <div class="hdr-dot" style="background:#3a7fc1"></div>
+      <div class="hdr-dot" style="background:#2ea05f"></div>
+      <div class="hdr-dot" style="background:#7c5cc8"></div>
+    </div>
+    <div class="hdr-title">Baby Tracker</div>
     <div id="hdrMsg">&nbsp;</div>
   </div>
   <div class="content" id="content"></div>
@@ -1002,6 +1018,67 @@ setInterval(() => {
 setInterval(() => {
   if (S.tab === 'dash') render();
 }, 60000);
+
+// ─── Pull to refresh ───────────────────────────────────────
+(function() {
+  const content = document.getElementById('content');
+  let startY = 0, pulling = false, indicator = null;
+
+  function createIndicator() {
+    indicator = document.createElement('div');
+    indicator.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0;
+      display: flex; justify-content: center; align-items: center;
+      height: 56px; background: var(--navy);
+      color: rgba(255,255,255,0.8); font-size: 13px;
+      font-family: 'DM Sans', sans-serif; font-weight: 300;
+      z-index: 999; transform: translateY(-56px);
+      transition: transform 0.2s ease;
+    `;
+    indicator.textContent = 'Pull to refresh…';
+    document.body.appendChild(indicator);
+  }
+
+  function showIndicator(show) {
+    if (!indicator) createIndicator();
+    indicator.style.transform = show ? 'translateY(0)' : 'translateY(-56px)';
+  }
+
+  async function doRefresh() {
+    if (!indicator) createIndicator();
+    indicator.textContent = 'Refreshing…';
+    indicator.style.transform = 'translateY(0)';
+    S.loading = true;
+    render();
+    await loadLogs();
+    indicator.textContent = 'Done!';
+    setTimeout(() => showIndicator(false), 800);
+  }
+
+  content.addEventListener('touchstart', e => {
+    if (content.scrollTop === 0) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }
+  }, {passive: true});
+
+  content.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    const dist = e.touches[0].clientY - startY;
+    if (dist > 10) showIndicator(true);
+  }, {passive: true});
+
+  content.addEventListener('touchend', e => {
+    if (!pulling) return;
+    pulling = false;
+    const dist = e.changedTouches[0].clientY - startY;
+    if (dist > 60) {
+      doRefresh();
+    } else {
+      showIndicator(false);
+    }
+  }, {passive: true});
+})();
 
 // ─── Startup ───────────────────────────────────────────────
 render();    // show the shell immediately (loading state)
